@@ -78,14 +78,28 @@ src/icuvrapp/
   ICUVRstudy.py     # GUI, study flow, data capture, export
 ```
 
-When running as a frozen (PyInstaller) build, `data/` is created next to the
-executable instead.
-
 ## Development
 
-Install dev tools and run the linter:
+`uv sync` installs the `dev` dependency group by default (which includes
+`ruff` and `prek`).
+
+### Pre-commit hooks with prek
+
+This repo uses [`prek`](https://prek.j178.dev/) (a fast, drop-in replacement
+for `pre-commit`) to run lint/format and hygiene checks before each commit.
+Hooks are configured in [prek.toml](prek.toml) and include trailing-whitespace,
+end-of-file-fixer, large-file / merge-conflict / private-key checks, JSON /
+TOML / YAML validation, and `ruff` lint + format.
+
+`prek` is included in the `dev` dependency group, so `uv sync` already
+installs it. Enable the git hook in this repo once:
 
 ```powershell
-uv sync --group dev
-uv run ruff check .
+uv run prek install
+```
+
+Run all hooks manually against every tracked file:
+
+```powershell
+uv run prek run --all-files
 ```
