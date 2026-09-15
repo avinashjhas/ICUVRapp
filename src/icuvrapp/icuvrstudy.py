@@ -95,6 +95,8 @@ class ICUVrStudyApp(ctk.CTk):
         self.stroop_results = []
         self.participant_name = ""
         self.selected_device_addr = None
+        self.adverse_event = "No"
+        self.adverse_event_details = ""
 
     def clear(self):
         for w in self.main_frame.winfo_children():
@@ -425,7 +427,7 @@ class ICUVrStudyApp(ctk.CTk):
 
     def next_trial(self):
         if self.trials <= 0:
-            self.show_end_screen()
+            self.show_adverse_event_screen()
         else:
             target = random.choice(list(self.colors.keys()))
             disp = random.choice(list(self.colors.keys()))
@@ -459,25 +461,135 @@ class ICUVrStudyApp(ctk.CTk):
         self.clear()
         self.next_trial()
 
-    # --- SCREEN 6: FINALIZE ---
+    # --- SCREEN 6: ADVERSE EVENT / SAFETY CHECK ---
+    def show_adverse_event_screen(self):
+        self.clear()
+        ctk.CTkLabel(
+            self.main_frame,
+            text="⚕️ Safety Check",
+            font=("Arial", 28, "bold"),
+            text_color="#3498db",
+        ).pack(pady=(30, 10))
+
+        instr_text = (
+            "Before we finish, please let us know how you are feeling.\n\n"
+            "Did you experience any discomfort, dizziness, nausea, eye strain, headache, "
+            "or any other adverse reaction during the session?"
+        )
+        ctk.CTkLabel(
+            self.main_frame, text=instr_text, font=("Arial", 18), justify="left"
+        ).pack(pady=10)
+
+        self.adverse_event_choice = ctk.CTkSegmentedButton(
+            self.main_frame, values=["No", "Yes"], command=self.on_adverse_choice
+        )
+        self.adverse_event_choice.set("No")
+        self.adverse_event_choice.pack(pady=15)
+
+        self.adverse_details_label = ctk.CTkLabel(
+            self.main_frame,
+            text="Please briefly describe what you experienced:",
+            font=("Arial", 15),
+        )
+        self.adverse_details_box = ctk.CTkTextbox(
+            self.main_frame, width=700, height=120, corner_radius=10
+        )
+        # Hidden until "Yes" is selected
+        self.adverse_details_visible = False
+
+        ctk.CTkButton(
+            self.main_frame,
+            text="CONTINUE",
+            command=self.handle_adverse_event_continue,
+            fg_color="#2ecc71",
+            font=("Arial", 18, "bold"),
+            height=50,
+            width=250,
+        ).pack(pady=25)
+
+    def on_adverse_choice(self, value):
+        if value == "Yes" and not self.adverse_details_visible:
+            self.adverse_details_label.pack(pady=(10, 0))
+            self.adverse_details_box.pack(pady=10)
+            self.adverse_details_visible = True
+        elif value == "No" and self.adverse_details_visible:
+            self.adverse_details_label.pack_forget()
+            self.adverse_details_box.pack_forget()
+            self.adverse_details_visible = False
+
+    def handle_adverse_event_continue(self):
+        self.adverse_event = self.adverse_event_choice.get()
+        if self.adverse_event == "Yes":
+            self.adverse_event_details = self.adverse_details_box.get(
+                "0.0", "end"
+            ).strip()
+            if not self.adverse_event_details:
+                messagebox.showwarning(
+                    "Please add detail",
+                    "Please briefly describe the reaction you experienced, "
+                    "or select 'No' above if you're feeling fine.",
+                )
+                return
+        else:
+            self.adverse_event_details = ""
+        self.show_end_screen()
+
+    # --- SCREEN 7: SUBMIT ---
     def show_end_screen(self):
         self.clear()
         ctk.CTkLabel(
             self.main_frame,
-            text="✨ Study Complete",
+            text="✨ Study Tasks Complete",
             font=("Arial", 36, "bold"),
             text_color="#3498db",
         ).pack(pady=50)
-        ctk.CTkButton(
+        ctk.CTkLabel(
             self.main_frame,
-            text="🔒 SAVE SECURE ZIP TO PENDRIVE",
+            text="Click Submit to securely save your responses.",
+            font=("Arial", 18),
+        ).pack(pady=(0, 20))
+        self.submit_btn = ctk.CTkButton(
+            self.main_frame,
+            text="SUBMIT",
             command=self.finalize_and_save,
             fg_color="#2ecc71",
+            font=("Arial", 20, "bold"),
             height=60,
             width=400,
+        )
+        self.submit_btn.pack(pady=10)
+
+    # --- SCREEN 8: SAVE ACKNOWLEDGEMENT ---
+    def show_acknowledgement_screen(self):
+        self.clear()
+        ctk.CTkLabel(
+            self.main_frame,
+            text="✅",
+            font=("Arial", 80, "bold"),
+            text_color="#2ecc71",
+        ).pack(pady=(60, 10))
+        ctk.CTkLabel(
+            self.main_frame,
+            text="Thank you. Your responses have been saved securely.",
+            font=("Arial", 22, "bold"),
         ).pack(pady=10)
+        ctk.CTkLabel(
+            self.main_frame,
+            text=f"Participant ID: {self.participant_id}",
+            font=("Arial", 16),
+        ).pack(pady=5)
+        ctk.CTkButton(
+            self.main_frame,
+            text="FINISH",
+            command=self.quit,
+            fg_color="#3498db",
+            font=("Arial", 18, "bold"),
+            height=50,
+            width=250,
+        ).pack(pady=30)
 
     def finalize_and_save(self):
+        self.submit_btn.configure(state="disabled", text="SAVING...")
         try:
             ts = datetime.now(tz=UTC).strftime("%Y%m%d_%H%M")
             with open(REGISTRY_FILE, "a", newline="") as f:
@@ -556,6 +668,8 @@ class ICUVrStudyApp(ctk.CTk):
                 "Stroop_Interference": round(inter, 2),
                 "Stroop_Accuracy": (len(cor) / 20) * 100,
                 "Stroop_Errors": 20 - len(cor),
+                "Adverse_Event": self.adverse_event,
+                "Adverse_Event_Details": self.adverse_event_details,
             }
 
             exc_p = os.path.join(BACKUP_FOLDER, f"Data_{self.participant_id}.xlsx")
@@ -580,13 +694,19 @@ class ICUVrStudyApp(ctk.CTk):
 
             os.remove(pdf_p)
             os.remove(exc_p)
-            messagebox.showinfo(
-                "Success", f"Data secured successfully for {self.participant_id}"
-            )
-            self.quit()
+            self.show_acknowledgement_screen()
 
         except Exception as e:
             messagebox.showerror("Error", f"Save failed: {e!s}")
+            # Clean up any partial output left behind so unencrypted PII
+            # doesn't sit on disk after a failed save.
+            for partial in (locals().get("pdf_p"), locals().get("exc_p")):
+                if partial and os.path.exists(partial):
+                    try:
+                        os.remove(partial)
+                    except OSError:
+                        pass
+            self.submit_btn.configure(state="normal", text="SUBMIT")
 
 
 def run_app():
